@@ -1,21 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using Emulator;
 
 namespace Emudev
 {
-    public enum Debug
-    {
-        Instruction,
-        Timer,
-        Register,
-        Stack,
-        Input,
-        Display,
-        Memory,
-        All
-    }
-    
     public class Chip8
     {
         private int consoleLeftOrigin = 0;
@@ -27,7 +16,7 @@ namespace Emudev
         private Stack<ushort> _stack;
         private Queue<bool[]> _input;
 
-        private byte[] _memory;
+        public byte[] _memory;
         private byte[] _registers;
         private bool[] _gfx;
 
@@ -61,49 +50,7 @@ namespace Emudev
 
         public ushort this[int i]
         {
-            get { return (ushort) ((_memory[i] << 8) + _memory[i + 1]); }
-        }
-
-        private byte GetNibble(ushort instruction, int n)
-        {
-            if(n == 1)
-                return (byte)((instruction & 0xF000) >> 12);
-        
-            if(n == 2)
-                return (byte)((instruction & 0x0F00) >> 8);
-        
-            if(n == 3)
-                return (byte)((instruction & 0x00F0) >> 4);
-        
-            if(n == 4)
-                return (byte)(instruction & 0x000F);
-
-            return 0;
-        }   
-
-        private byte GetN(ushort instruction)
-        {
-            return (byte)(instruction & 0x000F);
-        }
-
-        private byte GetNN(ushort instruction)
-        {
-            return (byte)(instruction & 0x00FF);
-        }
-        
-        private ushort GetNNN(ushort instruction)
-        {
-            return (ushort)(instruction & 0x0FFF);
-        }
-        
-        private byte GetX(ushort instruction)
-        {
-            return GetNibble(instruction, 2);
-        }
-        
-        private byte GetY(ushort instruction)
-        {
-            return GetNibble(instruction, 3);
+            get { return (ushort)((_memory[i] << 8) + _memory[i + 1]); }
         }
 
         public void ParseInput(string filepath)
@@ -390,9 +337,9 @@ namespace Emudev
         {
             var inst = this[_PC];
 
-            var nib1 = GetNibble(inst, 1);
+            var nib1 = Helpers.GetNibble(inst, 1);
 
-            if(GetNNN(inst) == _PC)
+            if(Helpers.GetNNN(inst) == _PC)
                 return false;
 
             if(!_handlers.ContainsKey(nib1))
@@ -437,7 +384,7 @@ namespace Emudev
                 if(_input.Count > 0)
                     _input.Dequeue();
             } 
-            while(state);
+            while(state && !(Console.KeyAvailable && Console.ReadKey(true).Key == ConsoleKey.Escape));
         }
         
         private void Handle0(ushort opcode)
@@ -459,49 +406,49 @@ namespace Emudev
             }
             else
             {
-                _PC = GetNNN(opcode);
+                _PC = Helpers.GetNNN(opcode);
             }
         }
         
         private void Handle1(ushort opcode)
         {
-            _PC = GetNNN(opcode);
+            _PC = Helpers.GetNNN(opcode);
         }
 
         private void Handle2(ushort opcode)
         {
             _stack.Push((ushort)(_PC + 2));
-            _PC = GetNNN(opcode);
+            _PC = Helpers.GetNNN(opcode);
         }
 
         private void Handle3(ushort opcode)
         {
-            var NN = GetNN(opcode);
-            var X = GetNibble(opcode, 2);
+            var NN = Helpers.GetNN(opcode);
+            var X = Helpers.GetNibble(opcode, 2);
 
             _PC += (ushort)(_registers[X] == NN ? 4 : 2);
         }
 
         private void Handle4(ushort opcode)
         {
-            var NN = GetNN(opcode);
-            var X = GetNibble(opcode, 2);
+            var NN = Helpers.GetNN(opcode);
+            var X = Helpers.GetNibble(opcode, 2);
 
             _PC += (ushort)(_registers[X] != NN ? 4 : 2);
         }
 
         private void Handle5(ushort opcode)
         {
-            var X = GetX(opcode);
-            var Y = GetY(opcode);
+            var X = Helpers.GetX(opcode);
+            var Y = Helpers.GetY(opcode);
 
             _PC += (ushort)(_registers[X] == _registers[Y] ? 4 : 2);
         }
 
         private void Handle6(ushort opcode)
         {
-            var NN = GetNN(opcode);
-            var X = GetNibble(opcode, 2);
+            var NN = Helpers.GetNN(opcode);
+            var X = Helpers.GetNibble(opcode, 2);
 
             _registers[X] = NN;
             _PC += 2;
@@ -509,8 +456,8 @@ namespace Emudev
 
         private void Handle7(ushort opcode)
         {
-            var NN = GetNN(opcode);
-            var X = GetNibble(opcode, 2);
+            var NN = Helpers.GetNN(opcode);
+            var X = Helpers.GetNibble(opcode, 2);
             
             _registers[X] += NN;
             _PC += 2;
@@ -518,12 +465,12 @@ namespace Emudev
 
         private void Handle8(ushort opcode)
         {
-            var X = GetX(opcode);
-            var Y = GetY(opcode);
+            var X = Helpers.GetX(opcode);
+            var Y = Helpers.GetY(opcode);
     
             var x = _registers[X];
 
-            switch(GetN(opcode)){
+            switch(Helpers.GetN(opcode)){
                 case 0x00:
                     _registers[X] = _registers[Y];
                     break;
@@ -579,28 +526,28 @@ namespace Emudev
         
         private void Handle9(ushort opcode)
         {
-            var X = GetX(opcode);
-            var Y = GetY(opcode);
+            var X = Helpers.GetX(opcode);
+            var Y = Helpers.GetY(opcode);
 
             _PC += (ushort)(_registers[X] != _registers[Y] ? 4 : 2);
         }
 
         private void HandleA(ushort opcode)
         {
-            _I = GetNNN(opcode);
+            _I = Helpers.GetNNN(opcode);
             _PC += 2;
         }
 
         private void HandleB(ushort opcode)
         {
-            _PC = (ushort)(_registers[0] + GetNNN(opcode));
+            _PC = (ushort)(_registers[0] + Helpers.GetNNN(opcode));
             _PC += 2;
         }
 
         private void HandleC(ushort opcode)
         {
-            var X = GetX(opcode);
-            var NN = GetNN(opcode);
+            var X = Helpers.GetX(opcode);
+            var NN = Helpers.GetNN(opcode);
 
             _registers[X] = (byte)((_random.Next(256) & 0xFF) & NN);
             _PC += 2;
@@ -608,7 +555,7 @@ namespace Emudev
 
         private void HandleD(ushort opcode)
         {
-            var end = (ushort)(GetN(opcode));
+            var end = (ushort)(Helpers.GetN(opcode));
 
             for(ushort i = _I; i < end; i++)
             {
@@ -631,8 +578,8 @@ namespace Emudev
 
         private void HandleE(ushort opcode)
         {
-            var X = GetX(opcode);
-            if(GetNN(opcode) == 0x9E)
+            var X = Helpers.GetX(opcode);
+            if(Helpers.GetNN(opcode) == 0x9E)
                 _PC += (ushort)(_input.Peek()[_registers[X]] ? 4 : 2);
             else
                 _PC += (ushort)(!_input.Peek()[_registers[X]] ? 4 : 2);
@@ -640,8 +587,8 @@ namespace Emudev
 
         private void HandleF(ushort opcode)
         {
-            var NN = GetNN(opcode);
-            var X = GetX(opcode);
+            var NN = Helpers.GetNN(opcode);
+            var X = Helpers.GetX(opcode);
 
             switch (NN) {
                 case 0x07:

@@ -36,5 +36,4 @@ Desktop.ini
 
 Makefile
 *.exe
-triangle.ch8
-Cheepl.cs
+*.chasm

@@ -1,6 +1,6 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EmuDev", "EmuDev\EmuDev.csproj", "{3A8521EE-37CD-4192-AA79-491FADA7B493}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Emulator", "Emulator\Emulator.csproj", "{3A8521EE-37CD-4192-AA79-491FADA7B493}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

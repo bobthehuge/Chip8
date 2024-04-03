@@ -1,8 +1,9 @@
 CC = gcc
 CPPFLAGS = -MMD
-CFLAGS = -Wall -Wextra -g `pkg-config --cflags sdl2`
+# CFLAGS = -Wall -Wextra -g `pkg-config --cflags sdl2`
+CFLAGS = -Wall -Wextra
 LDFLAGS =
-LDLIBS = `pkg-config --libs sdl2`
+# LDLIBS = `pkg-config --libs sdl2`
 
 
 SRC = chip.c

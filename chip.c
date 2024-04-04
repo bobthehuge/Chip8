@@ -135,18 +135,18 @@ void cyclechip(struct Chip *chip)
     inst &= 0xF0 >> 4;
 
     byte kk = chip->mem[chip->pc + 1];
-    word nnn = ((word)x << 8) + kk; 
-    byte n = nnn & 0x000F;
-    byte y = nnn & 0x00F0 >> 4;
-
     word op = (word)inst << 8 | kk;
+
+    word nnn = op & 0x0FFF;
+    byte n = op & 0x000F;
+    byte y = op & 0x00F0 >> 4;
 
     byte vX = chip->reg[(int)x];
     byte vY = chip->reg[(int)y];
 
     switch(inst)
     {
-    case 0x00:
+    case 0x0:
         switch(kk)
         {
         case 0xE0:
@@ -155,7 +155,7 @@ void cyclechip(struct Chip *chip)
             return;
 
         case 0xEE:
-            chip->pc = chip->stack[(int)chip->sp--];
+            chip->pc = chip->stack[chip->sp--];
             return;
 
         case 0xFD:
@@ -168,11 +168,11 @@ void cyclechip(struct Chip *chip)
             return;
         }
 
-    case 0x01:
+    case 0x1:
         chip->pc = nnn;
         return;
 
-    case 0x02:
+    case 0x2:
         if (chip->sp == MAX_LVL - 1)
         {
             WARNX("Reached maximum subroutines (%d)\n", MAX_LVL);
@@ -180,11 +180,11 @@ void cyclechip(struct Chip *chip)
             return;
         }
 
-        chip->stack[(int)chip->sp++] = chip->pc;
+        chip->stack[chip->sp++] = chip->pc;
         chip->pc = nnn;
         return;
 
-    case 0x03:
+    case 0x3:
         if (vX == kk)
         {
             chip->pc += 2;
@@ -193,7 +193,7 @@ void cyclechip(struct Chip *chip)
         chip->pc += 2;
         return;
 
-    case 0x04:
+    case 0x4:
         if (vX != kk)
         {
             chip->pc += 2;
@@ -202,7 +202,7 @@ void cyclechip(struct Chip *chip)
         chip->pc += 2;
         return;
 
-    case 0x05:
+    case 0x5:
         if (vX == vY)
         {
             chip->pc += 2;
@@ -211,58 +211,58 @@ void cyclechip(struct Chip *chip)
         chip->pc += 2;
         return;
 
-    case 0x06:
+    case 0x6:
         chip->reg[(int)x] = kk;
         chip->pc += 2;
         return;
 
-    case 0x07:
+    case 0x7:
         chip->reg[(int)x] += kk;
         chip->pc += 2;
         return;
 
-    case 0x08:
+    case 0x8:
         switch(n)
         {
-        case 0x00:
+        case 0x0:
             chip->reg[(int)x] = vY;
-            chip->reg[(int)y] = vX;
+            /* chip->reg[(int)y] = vX; */
             break;
 
-        case 0x01:
+        case 0x1:
             chip->reg[(int)x] |= vY;
             break;
 
-        case 0x02:
+        case 0x2:
             chip->reg[(int)x] &= vY;
             break;
 
-        case 0x03:
+        case 0x3:
             chip->reg[(int)x] ^= vY;
             break;
 
-        case 0x04:
+        case 0x4:
             chip->reg[0xF] = (vY > (0xFF - vX)) ? 0 : 1;
             chip->reg[(int)x] += vY;
             break;
 
-        case 0x05:
+        case 0x5:
             chip->reg[0xF] = (vX > vY) ? 1 : 0;
             chip->reg[(int)x] -= vY;
             break;
 
-        case 0x06:
-            chip->reg[0xF] = (vX & 0x01);
-            chip->reg[(int)x] /= 2;
+        case 0x6:
+            chip->reg[0xF] = (vX & 1);
+            chip->reg[(int)x] >>= 1;
             break;
 
-        case 0x07:
+        case 0x7:
             chip->reg[0xF] = (vX > vY) ? 1 : 0;
             chip->reg[(int)x] = vY - vX;
             break;
 
-        case 0x0E:
-            chip->reg[0xF] = (vX & 0x01);
+        case 0xE:
+            chip->reg[0xF] = (vX & 1);
             chip->reg[(int)x] *= 2;
             break;
         }
@@ -270,7 +270,7 @@ void cyclechip(struct Chip *chip)
         chip->pc += 2;
         return;
 
-    case 0x09:
+    case 0x9:
         if (vX != vY)
         {
             chip->pc += 2;
@@ -279,21 +279,21 @@ void cyclechip(struct Chip *chip)
         chip->pc += 2;
         return;
 
-    case 0x0A:
+    case 0xA:
         chip->I = nnn;
         chip->pc += 2;
         return;
 
-    case 0x0B:
+    case 0xB:
         chip->pc = nnn + chip->reg[0];
         return;
 
-    case 0x0C:
+    case 0xC:
         chip->reg[(int)x] = (byte)(rand() % 0xFF) & kk;
         chip->pc += 2;
         return;
 
-    case 0x0D:
+    case 0xD:
         {
             chip->reg[0xF] = 0;
 
@@ -323,7 +323,8 @@ void cyclechip(struct Chip *chip)
         return;
 
     default:
-        WARNX("Unknown instruction '0x%04X' @ '0x%04X'\n", op, chip->pc);
+        WARNX("Unknown instruction2 '0x%04X' @ '0x%04X'\n", op, chip->pc);
+        chip->pc += 2;
         return;
     }
 }
@@ -334,6 +335,7 @@ int main(void)
     struct Chip chip = {0};
 
     chip.pc = RESERVED;
+    chip.sp = 0;
 
     loadfont(&chip);
 

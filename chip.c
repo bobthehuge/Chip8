@@ -39,6 +39,7 @@ struct Chip
     word pc;
     byte sp;
     word I;
+    word lop;
 
     byte sound;
     byte timer;
@@ -130,8 +131,10 @@ void romfile2mem(struct Chip *chip, const char *rom_path)
 
 void cyclechip(struct Chip *chip)
 {
-    word op = ((word)chip->mem[chip->pc] << 8) | chip->mem[chip->pc + 1];
+    word op = (word)chip->mem[chip->pc] << 8 | chip->mem[chip->pc + 1];
     word nnn = op & 0x0FFF;
+
+    chip->lop = op;
 
     byte inst = (op & 0xF000) >> 12;
     byte kk = nnn & 0x00FF;
@@ -157,7 +160,16 @@ void cyclechip(struct Chip *chip)
             return;
 
         case 0xEE:
-            chip->pc = chip->stack[--chip->sp];
+            if (chip->sp == 0)
+            {
+                WARNX("No subroutine to return from\n");
+                chip->state = ERR;
+                return;
+            }
+
+            --chip->sp;
+            chip->pc = chip->stack[chip->sp];
+            chip->pc += 2;
             return;
 
         case 0xFD:
@@ -182,33 +194,28 @@ void cyclechip(struct Chip *chip)
             return;
         }
 
-        chip->stack[chip->sp++] = chip->pc;
+        chip->stack[chip->sp] = chip->pc;
+        chip->sp++;
         chip->pc = nnn;
         return;
 
     case 0x3:
         if (vX == kk)
-        {
             chip->pc += 2;
-        }
 
         chip->pc += 2;
         return;
 
     case 0x4:
         if (vX != kk)
-        {
             chip->pc += 2;
-        }
 
         chip->pc += 2;
         return;
 
     case 0x5:
         if (vX == vY)
-        {
             chip->pc += 2;
-        }
 
         chip->pc += 2;
         return;
@@ -249,12 +256,12 @@ void cyclechip(struct Chip *chip)
             break;
 
         case 0x5:
-            chip->reg[0xF] = (vX >= vY) ? 1 : 0;
+            chip->reg[0xF] = (vY > vX) ? 0 : 1;
             chip->reg[(int)x] -= vY;
             break;
 
         case 0x6:
-            chip->reg[0xF] = (vX & 1);
+            chip->reg[0xF] = (vX & 0x1);
             chip->reg[(int)x] >>= 1;
             break;
 
@@ -266,6 +273,11 @@ void cyclechip(struct Chip *chip)
         case 0xE:
             chip->reg[0xF] = vX >> 7;
             chip->reg[(int)x] <<= 1;
+            break;
+
+        default:
+            WARNX("Unknown instruction2 '0x%04X' @ '0x%04X'\n", op, chip->pc);
+            chip->state = ERR;
             break;
         }
 
@@ -297,19 +309,21 @@ void cyclechip(struct Chip *chip)
 
     case 0xD:
         {
+            word x = vX;
+            word y = vY;
             chip->reg[0xF] = 0;
 
             for (int yline = 0; yline < n; yline++)
             {
-                word pixel = chip->mem[chip->I + yline];
+                byte pixel = chip->mem[chip->I + yline];
 
                 for (int xline = 0; xline < 8; xline++)
                 {
                     if ((pixel & (0x80 >> xline)) != 0)
                     {
-                        size_t idx = x + xline + ((y + yline) * SCREEN_WIDTH);
+                        int idx = x + xline + ((y + yline) * SCREEN_WIDTH);
 
-                        if (chip->gfx[idx] == 1)
+                        if (chip->gfx[idx] == 1) 
                         {
                             chip->reg[0xF] = 1;
                         }
@@ -328,23 +342,24 @@ void cyclechip(struct Chip *chip)
         switch(kk)
         {
             case 0x1E:
-                chip->I += chip->reg[(int)x]; 
+                chip->I += vX; 
+
                 chip->pc += 2;
                 break;
 
             case 0x55:
-                for (int i = 0; i < x;)
+                for (int i = 0; i <= x; i++)
                 {
-                    chip->mem[chip->I++] = chip->reg[i++];
+                    chip->mem[chip->I + i] = chip->reg[i];
                 }
 
                 chip->pc += 2;
                 break;
 
             case 0x65:
-                for (int i = 0; i < x;)
+                for (int i = 0; i <= x; i++)
                 {
-                    chip->reg[i++] = chip->mem[chip->I++];
+                    chip->reg[i] = chip->mem[chip->I + i];
                 }
 
                 chip->pc += 2;
@@ -364,6 +379,40 @@ void cyclechip(struct Chip *chip)
     }
 }
 
+void draw_screen(struct Chip *chip)
+{
+    const char symbols[] = "╗╚═╝╔║"; 
+
+    fwrite(symbols + 4, 1, 1, stdout);
+
+    for (int n = 0; n < SCREEN_WIDTH * 2; n++)
+    {
+        fwrite(symbols + 2, 1, 1, stdout);
+    }
+
+    fwrite(symbols, 1, 1, stdout);
+    printf("\n%c", symbols[5]);
+
+    for (int i = 0; i < SCREEN_HEIGHT * SCREEN_WIDTH; i++)
+    {
+        if (i % SCREEN_WIDTH == 0 && i != 0)
+            printf("%c\n%c", symbols[5], symbols[5]);
+
+        printf("%s", chip->gfx[i] == 0 ? "  " : "██");
+    }
+
+    printf("%c\n", symbols[5]);
+
+    fwrite(symbols + 1, 1, 1, stdout);
+
+    for (int n = 0; n < SCREEN_WIDTH * 2; n++)
+    {
+        fwrite(symbols + 2, 1, 1, stdout);
+    }
+
+    printf("%c\n", symbols[3]);
+}
+
 int main(void)
 {
     srand(time(NULL));
@@ -376,25 +425,17 @@ int main(void)
     romfile2mem(&chip, ROM_PATH);
     LOGX("Loaded '%s' to Chip's RAM", ROM_PATH);
 
-    while (chip.state != ERR && chip.pc >= RESERVED && chip.pc < MEM_SIZE)
+    while (chip.state == RUN && chip.pc >= RESERVED && chip.pc < MEM_SIZE)
     {
         cyclechip(&chip);
+        /* LOGX("%04X", chip.lop); */
+        /* LOGX("%04X", chip.I); */
         /* chip.redraw = 1; */
         /* chip.gfx[0] = 0xFF; */
 
         if (chip.redraw == 1)
         {
-            for (int i = 0; i < SCREEN_HEIGHT * SCREEN_WIDTH; i++)
-            {
-                if (i % SCREEN_WIDTH == 0 && i != 0)
-                {
-                    printf("\n");
-                }
-
-                printf("%s", chip.gfx[i] == 0xFF ? "❚❚" : "  ");
-            }
-
-            printf("\n");
+            draw_screen(&chip);
             chip.redraw = 0;
         }
     }

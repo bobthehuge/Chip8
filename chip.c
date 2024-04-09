@@ -130,19 +130,20 @@ void romfile2mem(struct Chip *chip, const char *rom_path)
 
 void cyclechip(struct Chip *chip)
 {
-    byte inst = chip->mem[chip->pc];
-    byte x = inst & 0x0F;
-    inst &= 0xF0 >> 4;
-
-    byte kk = chip->mem[chip->pc + 1];
-    word op = (word)inst << 8 | kk;
-
+    word op = ((word)chip->mem[chip->pc] << 8) | chip->mem[chip->pc + 1];
     word nnn = op & 0x0FFF;
-    byte n = op & 0x000F;
-    byte y = op & 0x00F0 >> 4;
+
+    byte inst = (op & 0xF000) >> 12;
+    byte kk = nnn & 0x00FF;
+    byte n = nnn & 0x000F;
+    byte x = (op & 0x0F00) >> 8;
+    byte y = (op & 0x00F0) >> 4;
 
     byte vX = chip->reg[(int)x];
     byte vY = chip->reg[(int)y];
+
+    /* LOGX("'0x%04X' @ '0x%04X'\n", op, chip->pc); */
+    /* WARNX("'0x%04X'\n", inst); */
 
     switch(inst)
     {
@@ -151,11 +152,12 @@ void cyclechip(struct Chip *chip)
         {
         case 0xE0:
             memset(chip->gfx, 0, SCREEN_WIDTH * SCREEN_HEIGHT);
+            chip->redraw = 1;
             chip->pc += 2;
             return;
 
         case 0xEE:
-            chip->pc = chip->stack[chip->sp--];
+            chip->pc = chip->stack[--chip->sp];
             return;
 
         case 0xFD:
@@ -242,12 +244,12 @@ void cyclechip(struct Chip *chip)
             break;
 
         case 0x4:
-            chip->reg[0xF] = (vY > (0xFF - vX)) ? 0 : 1;
+            chip->reg[0xF] = (vY > (0xFF - vX)) ? 1 : 0;
             chip->reg[(int)x] += vY;
             break;
 
         case 0x5:
-            chip->reg[0xF] = (vX > vY) ? 1 : 0;
+            chip->reg[0xF] = (vX >= vY) ? 1 : 0;
             chip->reg[(int)x] -= vY;
             break;
 
@@ -257,13 +259,13 @@ void cyclechip(struct Chip *chip)
             break;
 
         case 0x7:
-            chip->reg[0xF] = (vX > vY) ? 1 : 0;
+            chip->reg[0xF] = (vX > vY) ? 0 : 1;
             chip->reg[(int)x] = vY - vX;
             break;
 
         case 0xE:
-            chip->reg[0xF] = (vX & 1);
-            chip->reg[(int)x] *= 2;
+            chip->reg[0xF] = vX >> 7;
+            chip->reg[(int)x] <<= 1;
             break;
         }
 
@@ -322,9 +324,42 @@ void cyclechip(struct Chip *chip)
         chip->pc += 2;
         return;
 
+    case 0xF:
+        switch(kk)
+        {
+            case 0x1E:
+                chip->I += chip->reg[(int)x]; 
+                chip->pc += 2;
+                break;
+
+            case 0x55:
+                for (int i = 0; i < x;)
+                {
+                    chip->mem[chip->I++] = chip->reg[i++];
+                }
+
+                chip->pc += 2;
+                break;
+
+            case 0x65:
+                for (int i = 0; i < x;)
+                {
+                    chip->reg[i++] = chip->mem[chip->I++];
+                }
+
+                chip->pc += 2;
+                break;
+
+            default:
+                WARNX("Unknown instruction2 '0x%04X' @ '0x%04X'\n", op, chip->pc);
+                chip->state = ERR;
+                break;
+        }
+        return;
+
     default:
         WARNX("Unknown instruction2 '0x%04X' @ '0x%04X'\n", op, chip->pc);
-        chip->pc += 2;
+        chip->state = ERR;
         return;
     }
 }
@@ -335,16 +370,33 @@ int main(void)
     struct Chip chip = {0};
 
     chip.pc = RESERVED;
-    chip.sp = 0;
 
     loadfont(&chip);
 
     romfile2mem(&chip, ROM_PATH);
     LOGX("Loaded '%s' to Chip's RAM", ROM_PATH);
 
-    while (chip.state != ERR && chip.pc < MEM_SIZE)
+    while (chip.state != ERR && chip.pc >= RESERVED && chip.pc < MEM_SIZE)
     {
         cyclechip(&chip);
+        /* chip.redraw = 1; */
+        /* chip.gfx[0] = 0xFF; */
+
+        if (chip.redraw == 1)
+        {
+            for (int i = 0; i < SCREEN_HEIGHT * SCREEN_WIDTH; i++)
+            {
+                if (i % SCREEN_WIDTH == 0 && i != 0)
+                {
+                    printf("\n");
+                }
+
+                printf("%s", chip.gfx[i] == 0xFF ? "❚❚" : "  ");
+            }
+
+            printf("\n");
+            chip.redraw = 0;
+        }
     }
 
     /* memdump(stdout, &chip); */

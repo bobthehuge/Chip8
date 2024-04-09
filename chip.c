@@ -145,9 +145,6 @@ void cyclechip(struct Chip *chip)
     byte vX = chip->reg[(int)x];
     byte vY = chip->reg[(int)y];
 
-    /* LOGX("'0x%04X' @ '0x%04X'\n", op, chip->pc); */
-    /* WARNX("'0x%04X'\n", inst); */
-
     switch(inst)
     {
     case 0x0:
@@ -235,7 +232,6 @@ void cyclechip(struct Chip *chip)
         {
         case 0x0:
             chip->reg[(int)x] = vY;
-            /* chip->reg[(int)y] = vX; */
             break;
 
         case 0x1:
@@ -428,19 +424,13 @@ int main(void)
     while (chip.state == RUN && chip.pc >= RESERVED && chip.pc < MEM_SIZE)
     {
         cyclechip(&chip);
-        /* LOGX("%04X", chip.lop); */
-        /* LOGX("%04X", chip.I); */
-        /* chip.redraw = 1; */
-        /* chip.gfx[0] = 0xFF; */
-
+        
         if (chip.redraw == 1)
         {
             draw_screen(&chip);
             chip.redraw = 0;
         }
     }
-
-    /* memdump(stdout, &chip); */
 
     return 0;
 }
